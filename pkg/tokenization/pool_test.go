@@ -88,6 +88,7 @@ func TestPool_ProcessTask(t *testing.T) {
 	mockTokenizer := &MockTokenizer{}
 
 	pool := &Pool{
+		modelName:             testModelName,
 		workers:               1,
 		indexer:               mockIndexer,
 		tokenizer:             mockTokenizer,
@@ -137,10 +138,9 @@ func TestPool_RunIntegration(t *testing.T) {
 	}
 
 	config := &Config{
-		WorkersCount: 5,
-		HFTokenizerConfig: &HFTokenizerConfig{
-			TokenizersCacheDir: t.TempDir(),
-		},
+		ModelName:             testModelName,
+		WorkersCount:          5,
+		HFTokenizerConfig:     DefaultHFTokenizerConfig(),
 		MinPrefixOverlapRatio: defaultMinPrefixOverlapRatio,
 	}
 
@@ -188,10 +188,9 @@ func setupStressTest(b *testing.B) *Pool {
 	b.Helper()
 
 	config := &Config{
-		WorkersCount: benchmarkWorkerCount,
-		HFTokenizerConfig: &HFTokenizerConfig{
-			TokenizersCacheDir: b.TempDir(),
-		},
+		ModelName:             modelName,
+		WorkersCount:          benchmarkWorkerCount,
+		HFTokenizerConfig:     DefaultHFTokenizerConfig(),
 		MinPrefixOverlapRatio: defaultMinPrefixOverlapRatio,
 	}
 

@@ -35,6 +35,8 @@ const (
 
 // Config holds the configuration for the TokenizationPool.
 type Config struct {
+	// Base model name for the tokenizer.
+	ModelName string `json:"modelName"`
 	// Number of worker goroutines for processing tokenization tasks.
 	WorkersCount int `json:"workersCount"`
 	// Minimum overlap ratio to skip full tokenization and use cached prefix tokens.
@@ -75,10 +77,11 @@ type Task struct {
 
 // Pool encapsulates the queue, worker pool, and token indexer.
 type Pool struct {
-	workers int
-	queue   workqueue.TypedRateLimitingInterface[Task]
-	wg      sync.WaitGroup
-	indexer prefixstore.Indexer
+	modelName string // base model name for tokenization
+	workers   int
+	queue     workqueue.TypedRateLimitingInterface[Task]
+	wg        sync.WaitGroup
+	indexer   prefixstore.Indexer
 
 	// Tokenizer caches multiple tokenizers in memory.
 	// The cache is shared between all pool workers. Since each tokenizer
@@ -103,7 +106,7 @@ func NewTokenizationPool(config *Config, store prefixstore.Indexer) (*Pool, erro
 	tokenizers := make([]Tokenizer, 0, 3)
 
 	if config.LocalTokenizerConfig.IsEnabled() {
-		localTokenizer, err := NewCachedLocalTokenizer(*config.LocalTokenizerConfig)
+		localTokenizer, err := NewCachedLocalTokenizer(config.ModelName, *config.LocalTokenizerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create local tokenizer: %w", err)
 		}
@@ -127,6 +130,7 @@ func NewTokenizationPool(config *Config, store prefixstore.Indexer) (*Pool, erro
 	}
 
 	return &Pool{
+		modelName:             config.ModelName,
 		workers:               config.WorkersCount,
 		queue:                 workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[Task]()),
 		indexer:               store,
