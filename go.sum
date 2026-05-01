@@ -217,8 +217,12 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/llm-d/llm-d-kv-cache v0.7.1 h1:86bKidK10h5b39rGLuoJ0nXWoaNiXdjZdcK4FIUOVhw=
 github.com/llm-d/llm-d-kv-cache v0.7.1/go.mod h1:3gTTm6+Vpevnh8TvtxoIerCaVBQiBB5CvbuXk31Pohg=
+github.com/llm-d/llm-d-kv-cache v0.8.0-rc.1 h1:3Ttd5GRGhc62Km1w+3eRcSsv7dH485nu+Dsr80d8oDM=
+github.com/llm-d/llm-d-kv-cache v0.8.0-rc.1/go.mod h1:3gTTm6+Vpevnh8TvtxoIerCaVBQiBB5CvbuXk31Pohg=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
 github.com/maruel/natural v1.1.1/go.mod h1:v+Rfd79xlw1AgVBjbO0BEQmptqb5HvL/k9GRHB7ZKEg=
+github.com/mengmeiye/llm-d-kv-cache v0.8.0-rc.1.0.20260501125039-b3cc0da8fedb h1:AGOXxp72s2CExfQe1/lk8bQ9/a3aEz0vgMscDBYDRgc=
+github.com/mengmeiye/llm-d-kv-cache v0.8.0-rc.1.0.20260501125039-b3cc0da8fedb/go.mod h1:x14mhZIRMIhmk6Cz/Gc1N8sZywjt9V6trS3xiQYM1pg=
 github.com/mfridman/tparse v0.18.0 h1:wh6dzOKaIwkUGyKgOntDW4liXSo37qg5AXbIhkMV3vE=
 github.com/mfridman/tparse v0.18.0/go.mod h1:gEvqZTuCgEhPbYk/2lS3Kcxg1GmTxxU7kTC8DvP0i/A=
 github.com/moby/spdystream v0.5.1 h1:9sNYeYZUcci9R6/w7KDaFWEWeV4LStVG78Mpyq/Zm/Y=
