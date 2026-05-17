@@ -39,7 +39,7 @@ func TestPrefillStep_SendsCorrectGenerateRequest(t *testing.T) {
 
 	step, err := NewPrefillStep(map[string]any{
 		"gateway_path": gateway.DefaultGeneratePath,
-		"ec_connector": connector.NameNIXLv2,
+		ParamECConnector: connector.NameNIXLv2,
 	})
 	if err != nil {
 		t.Fatal(err)

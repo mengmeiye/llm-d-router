@@ -14,7 +14,7 @@ import (
 	"github.com/llm-d/coordinator/pkg/connector"
 	"github.com/llm-d/coordinator/pkg/gateway"
 	"github.com/llm-d/coordinator/pkg/pipeline"
-	_ "github.com/llm-d/coordinator/pkg/steps"
+	"github.com/llm-d/coordinator/pkg/steps"
 )
 
 func TestFullPipeline_AllConnectorCombinations(t *testing.T) {
@@ -98,9 +98,9 @@ func TestFullPipeline_AllConnectorCombinations(t *testing.T) {
 			stepConfigs := []config.StepConfig{
 				{Type: "replace-media-urls", Params: map[string]any{"download_timeout": "5s"}},
 				{Type: "render", Params: map[string]any{"endpoint": "/v1/chat/completions/render"}},
-				{Type: "encode", Params: map[string]any{"gateway_path": gateway.DefaultGeneratePath, "ec_connector": tc.ecConnector}},
-				{Type: "prefill", Params: map[string]any{"gateway_path": gateway.DefaultGeneratePath, "kv_connector": tc.kvConnector, "ec_connector": tc.ecConnector}},
-				{Type: "decode", Params: map[string]any{"kv_connector": tc.kvConnector}},
+				{Type: "encode", Params: map[string]any{steps.ParamGatewayPath: gateway.DefaultGeneratePath, steps.ParamECConnector: tc.ecConnector}},
+				{Type: "prefill", Params: map[string]any{steps.ParamGatewayPath: gateway.DefaultGeneratePath, steps.ParamKVConnector: tc.kvConnector, steps.ParamECConnector: tc.ecConnector}},
+				{Type: "decode", Params: map[string]any{steps.ParamKVConnector: tc.kvConnector}},
 			}
 
 			pipelineSteps := make([]pipeline.Step, 0, len(stepConfigs))
@@ -241,8 +241,8 @@ func TestFullPipeline_Integration(t *testing.T) {
 	stepConfigs := []config.StepConfig{
 		{Type: "replace-media-urls", Params: map[string]any{"download_timeout": "5s"}},
 		{Type: "render", Params: map[string]any{"endpoint": "/v1/chat/completions/render"}},
-		{Type: "encode", Params: map[string]any{"gateway_path": "/inference/v1/generate", "ec_connector": "nixlv2"}},
-		{Type: "prefill", Params: map[string]any{"gateway_path": "/inference/v1/generate", "ec_connector": "nixlv2"}},
+		{Type: "encode", Params: map[string]any{steps.ParamGatewayPath: gateway.DefaultGeneratePath, steps.ParamECConnector: connector.NameNIXLv2}},
+		{Type: "prefill", Params: map[string]any{steps.ParamGatewayPath: gateway.DefaultGeneratePath, steps.ParamECConnector: connector.NameNIXLv2}},
 		{Type: "decode", Params: map[string]any{}},
 	}
 

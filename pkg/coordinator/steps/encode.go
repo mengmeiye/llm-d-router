@@ -26,7 +26,7 @@ type EncodeStep struct {
 
 func NewEncodeStep(params map[string]any) (pipeline.Step, error) {
 	path := gateway.DefaultGeneratePath
-	if v, ok := params["gateway_path"].(string); ok {
+	if v, ok := params[ParamGatewayPath].(string); ok {
 		path = v
 	}
 	maxParallel := 8
@@ -36,7 +36,7 @@ func NewEncodeStep(params map[string]any) (pipeline.Step, error) {
 		}
 		maxParallel = v
 	}
-	ecName, _ := params["ec_connector"].(string)
+	ecName, _ := params[ParamECConnector].(string)
 	ecConn, err := ec.Build(ecName)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)

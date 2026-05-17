@@ -68,7 +68,7 @@ func TestEncodeStep_ParallelFanOut(t *testing.T) {
 	step, err := NewEncodeStep(map[string]any{
 		"gateway_path": gateway.DefaultGeneratePath,
 		"max_parallel": 4,
-		"ec_connector": connector.NameNIXLv2,
+		ParamECConnector: connector.NameNIXLv2,
 	})
 	if err != nil {
 		t.Fatal(err)

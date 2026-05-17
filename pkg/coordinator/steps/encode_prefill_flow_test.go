@@ -64,7 +64,7 @@ func TestEncodeToPrefill_ECTransferParamsFlow(t *testing.T) {
 	// Run encode step
 	encodeStep, _ := NewEncodeStep(map[string]any{
 		"gateway_path": gateway.DefaultGeneratePath,
-		"ec_connector": connector.NameNIXLv2,
+		ParamECConnector: connector.NameNIXLv2,
 	})
 	encodeStep.(*EncodeStep).SetGatewayClient(gwClient)
 
@@ -81,7 +81,7 @@ func TestEncodeToPrefill_ECTransferParamsFlow(t *testing.T) {
 	// Run prefill step
 	prefillStep, _ := NewPrefillStep(map[string]any{
 		"gateway_path": gateway.DefaultGeneratePath,
-		"ec_connector": connector.NameNIXLv2,
+		ParamECConnector: connector.NameNIXLv2,
 	})
 	prefillStep.(*PrefillStep).SetGatewayClient(gwClient)
 

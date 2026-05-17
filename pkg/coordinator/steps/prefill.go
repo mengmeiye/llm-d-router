@@ -26,15 +26,15 @@ type PrefillStep struct {
 
 func NewPrefillStep(params map[string]any) (pipeline.Step, error) {
 	path := gateway.DefaultGeneratePath
-	if v, ok := params["gateway_path"].(string); ok {
+	if v, ok := params[ParamGatewayPath].(string); ok {
 		path = v
 	}
-	kvName, _ := params["kv_connector"].(string)
+	kvName, _ := params[ParamKVConnector].(string)
 	kvConn, err := kv.Build(kvName)
 	if err != nil {
 		return nil, fmt.Errorf("prefill: %w", err)
 	}
-	ecName, _ := params["ec_connector"].(string)
+	ecName, _ := params[ParamECConnector].(string)
 	ecConn, err := ec.Build(ecName)
 	if err != nil {
 		return nil, fmt.Errorf("prefill: %w", err)
