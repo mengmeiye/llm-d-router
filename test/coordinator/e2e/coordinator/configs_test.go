@@ -30,11 +30,11 @@ gateway:
   max_idle_conns_per_host: 100
   idle_conn_timeout: 90s
   timeout: 60s
-  use_openai_format: true
 
 pipeline:
   kv_connector: kv-nixl
   ec_connector: ec-nixl
+  use_openai_format: true
   steps:
     - type: replace-media-urls
       params:
