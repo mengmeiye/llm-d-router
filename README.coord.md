@@ -18,18 +18,21 @@ The Coordinator processes each request through a configurable pipeline of steps:
 
 ## Quick Start
 
+The coordinator targets live in `Makefile.coord.mk`, which the root `Makefile`
+does not include, so pass it explicitly with `-f`:
+
 ```bash
 # Build
-make build
+make -f Makefile.coord.mk build
 
 # Run with default config
-make run
+make -f Makefile.coord.mk run
 
 # Run with custom config
 ./bin/coordinator --config path/to/config.yaml
 
 # Run tests
-make test
+make -f Makefile.coord.mk test
 ```
 
 ## Configuration

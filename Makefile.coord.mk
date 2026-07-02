@@ -103,8 +103,8 @@ go-mod-check: image-build-builder
 	( echo "ERROR: go.mod/go.sum are not tidy. Run 'go mod tidy' and commit."; exit 1 )
 
 .PHONY: tidy
-tidy: ## Tidy go modules
-	go mod tidy
+tidy: image-build-builder ## Tidy go modules
+	$(BUILDER_RUN) 'go mod tidy'
 
 .PHONY: clean
 clean: ## Clean build artifacts, tools and caches

@@ -50,14 +50,15 @@ var (
 )
 
 // parseSGLangBootstrapPort resolves the bootstrap port from the raw env value.
-// An empty value selects the default. rejected is true only when a non-empty
-// value fails to parse, in which case the default is returned.
+// An empty value selects the default. rejected is true when a non-empty value
+// fails to parse or falls outside the valid TCP port range, in which case the
+// default is returned.
 func parseSGLangBootstrapPort(raw string) (port int, rejected bool) {
 	if raw == "" {
 		return defaultSGLangBootstrapPort, false
 	}
 	p, err := strconv.Atoi(raw)
-	if err != nil {
+	if err != nil || p < 1 || p > 65535 {
 		return defaultSGLangBootstrapPort, true
 	}
 	return p, false
