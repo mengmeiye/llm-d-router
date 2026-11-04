@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/llm-d/llm-d-router/pkg/common/observability/logging"
+	"github.com/llm-d/llm-d-router/pkg/kvcache"
 	"github.com/llm-d/llm-d-router/pkg/kvcache/kvblock"
 	"github.com/llm-d/llm-d-router/pkg/kvcache/metrics"
 )
@@ -2329,4 +2330,45 @@ func TestProcessEventBatch_LoRA(t *testing.T) {
 		BlockHashes: []uint64{2001, 2002},
 	}
 	pool.processEventBatch(ctx, &EventBatch{Events: []GenericEvent{removeEvent}}, "pod-a", "test-model")
+}
+
+// TestSharedTierSurvivesPublisherRetire verifies that blocks a pod stores in
+// a shared tier are held by its scope: retiring the pod clears its private
+// tiers but keeps the shared blocks, and a BlockRemoved from any pod in the
+// scope evicts them.
+func TestSharedTierSurvivesPublisherRetire(t *testing.T) {
+	ctx := logging.NewTestLoggerIntoContext(context.Background())
+	pool, idx, tp := newTestPool(t, 16)
+	holders, err := kvcache.NewSharedHolders([]*kvcache.KVCacheBackendConfig{
+		{Name: "storage", Weight: 0.5, Shared: kvcache.SharedScopeNode},
+	})
+	require.NoError(t, err)
+	holders.SetNode("pod-a", "node-1")
+	holders.SetNode("pod-b", "node-1")
+	pool.SetSharedHolders(holders)
+
+	tokens := makeTokens(64)
+	engineKeys := makeEngineKeys(4, 700)
+	pool.processEventBatch(ctx, &EventBatch{Events: []GenericEvent{
+		&BlockStoredEvent{BlockHashes: engineKeys, Tokens: tokens},
+		&BlockStoredEvent{BlockHashes: engineKeys, DeviceTier: "STORAGE"},
+	}}, "pod-a", "test-model")
+
+	canonicalKeys, err := tp.TokensToKVBlockKeys(kvblock.EmptyBlockHash, tokens, "test-model", nil)
+	require.NoError(t, err)
+	holder := holders.Holder("pod-a", "storage")
+
+	pool.processRawMessage(ctx, &RawMessage{SourceEndpoint: "pod-a", reset: true, retire: true})
+	for _, ck := range canonicalKeys {
+		result, err := idx.Lookup(ctx, []kvblock.BlockHash{ck}, nil)
+		require.NoError(t, err)
+		require.Equal(t, []kvblock.PodEntry{{PodIdentifier: holder, DeviceTier: "storage"}}, result[ck])
+	}
+
+	pool.processEventBatch(ctx, &EventBatch{Events: []GenericEvent{
+		&BlockRemovedEvent{BlockHashes: engineKeys, DeviceTier: "STORAGE"},
+	}}, "pod-b", "test-model")
+	result, err := idx.Lookup(ctx, canonicalKeys[:1], nil)
+	require.NoError(t, err)
+	assert.Empty(t, result[canonicalKeys[0]])
 }

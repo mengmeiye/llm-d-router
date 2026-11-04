@@ -112,6 +112,9 @@ type Producer struct {
 
 	blockSizeTokens int
 
+	// sharedHolders learns each endpoint's node for node-scoped shared tiers.
+	sharedHolders *kvcache.SharedHolders
+
 	// Plugin-lifetime, not request-scoped: SubscriberManager binds each
 	// subscriber's goroutine to the ctx passed at registration.
 	subscriberCtx context.Context
@@ -176,10 +179,16 @@ func New(ctx context.Context, name string, config PluginConfig) (*Producer, erro
 		return nil, fmt.Errorf("failed to create token processor: %w", err)
 	}
 
+	sharedHolders, err := kvcache.NewSharedHolders(config.IndexerConfig.BackendConfigs)
+	if err != nil {
+		return nil, err
+	}
+
 	indexer, err := kvcache.NewKVCacheIndexer(ctx, config.IndexerConfig, tokenProcessor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kvcache.Indexer: %w", err)
 	}
+	indexer.SetSharedHolders(sharedHolders)
 	go indexer.Run(ctx)
 
 	adapter, err := engineadapter.NewAdapter(config.KVEventsConfig.EngineType)
@@ -191,6 +200,7 @@ func New(ctx context.Context, name string, config PluginConfig) (*Producer, erro
 		return nil, fmt.Errorf("failed to create KV-events pool: %w", err)
 	}
 	indexer.SetCacheFormats(pool.CacheFormats())
+	pool.SetSharedHolders(sharedHolders)
 	pool.Start(ctx)
 
 	subscribersManager := kvevents.NewSubscriberManager(pool)
@@ -220,6 +230,7 @@ func New(ctx context.Context, name string, config PluginConfig) (*Producer, erro
 		speculativeTTL:     speculativeTTL,
 		speculativeEnabled: config.SpeculativeIndexing,
 		blockSizeTokens:    tokenProcessor.BlockSize(),
+		sharedHolders:      sharedHolders,
 		subscriberCtx:      ctx,
 	}, nil
 }

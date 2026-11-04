@@ -197,6 +197,9 @@ type Pool struct {
 	adapter        EngineAdapter
 	groupCatalog   *kvblock.GroupCatalog
 	cacheFormats   *kvblock.CacheFormatCatalog
+	// sharedHolders attributes blocks of shared tiers to their scope; nil
+	// when no tier is shared.
+	sharedHolders *kvcache.SharedHolders
 	// dedup lives in the Pool, not as an Index decorator, because its scope is
 	// built from event fields absent from the Index.Evict signature (device
 	// tier, KV-cache group, DP rank) and a store must be counted only after
@@ -289,6 +292,12 @@ func (p *Pool) startSpan(ctx context.Context, name string, opts []trace.SpanStar
 // total to the depth gauge.
 func (p *Pool) addQueueDepth(delta int64) {
 	metrics.PoolQueueDepth.Set(float64(p.queueDepth.Add(delta)))
+}
+
+// SetSharedHolders attributes blocks of shared tiers to the holders it maps.
+// Call it before Start.
+func (p *Pool) SetSharedHolders(holders *kvcache.SharedHolders) {
+	p.sharedHolders = holders
 }
 
 // GroupCatalog returns the KV cache group metadata learned from events.
@@ -599,12 +608,13 @@ func (p *Pool) processEventBatch(ctx context.Context, batch *EventBatch, podIden
 		switch ev := genericEvent.(type) {
 		case *BlockStoredEvent:
 			deviceTier := normalizeDeviceTier(ev.DeviceTier)
+			holder := p.sharedHolders.Holder(podIdentifier, deviceTier)
 
 			// Scope for reference-counting this store against duplicate removes.
 			// Mirrors the index eviction identity (pod, tier, group); DP rank is
 			// the sentinel until PR #370 makes the index DP-aware.
 			storeScope := blockScope{
-				podIdentifier:    podIdentifier,
+				podIdentifier:    holder,
 				deviceTier:       deviceTier,
 				groupIdx:         groupIdxOrNoGroup(ev.GroupIdx),
 				dataParallelRank: noDataParallelRank,
@@ -617,7 +627,7 @@ func (p *Pool) processEventBatch(ctx context.Context, batch *EventBatch, podIden
 			}
 
 			// Create PodEntry for this specific event's device tier.
-			podEntries := []kvblock.PodEntry{{PodIdentifier: podIdentifier, DeviceTier: deviceTier}}
+			podEntries := []kvblock.PodEntry{{PodIdentifier: holder, DeviceTier: deviceTier}}
 			hasExplicitKind := ev.KVCacheSpecKind != ""
 			if ev.GroupIdx != nil {
 				g := kvblock.GroupID(*ev.GroupIdx)
@@ -828,8 +838,9 @@ func (p *Pool) processEventBatch(ctx context.Context, batch *EventBatch, podIden
 				}
 			}
 
+			holder := p.sharedHolders.Holder(podIdentifier, deviceTier)
 			// Create PodEntry for this specific event's device tier.
-			podEntries := []kvblock.PodEntry{{PodIdentifier: podIdentifier, DeviceTier: deviceTier}}
+			podEntries := []kvblock.PodEntry{{PodIdentifier: holder, DeviceTier: deviceTier}}
 			if ev.GroupIdx != nil {
 				podEntries[0].HasGroup = true
 				podEntries[0].GroupIdx = kvblock.GroupID(*ev.GroupIdx)
@@ -840,7 +851,7 @@ func (p *Pool) processEventBatch(ctx context.Context, batch *EventBatch, podIden
 			// only forward a hash to the index once no outstanding store still
 			// references it. Unknown hashes pass through (Evict is a no-op).
 			removeScope := blockScope{
-				podIdentifier:    podIdentifier,
+				podIdentifier:    holder,
 				deviceTier:       deviceTier,
 				groupIdx:         groupIdxOrNoGroup(ev.GroupIdx),
 				dataParallelRank: noDataParallelRank,
@@ -882,6 +893,7 @@ func (p *Pool) processEventBatch(ctx context.Context, batch *EventBatch, podIden
 			// AllBlocksCleared is pod-wide: vLLM reset its entire prefix cache
 			// (e.g. after an RLHF weight update), so drop every entry for this pod
 			// across all tiers. vLLM and SGLang both emit it with no tier annotation.
+			// Shared-tier blocks are held by the scope, not the pod, and stay.
 			// Index.Clear cannot scope by tier, so if an engine ever starts setting
 			// DeviceTier (a tier-scoped reset), this would over-wipe the other tiers.
 			// Surface that here so the regression does not pass silently.

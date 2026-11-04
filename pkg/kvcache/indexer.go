@@ -56,6 +56,7 @@ type Indexer struct {
 	keyWalker      kvblock.KeyWalker      // kvBlockIndex's walk capability; nil without one
 	tierWeights    map[string]float64     // device tier -> weight for the prefix matcher
 	cacheFormats   *kvblock.CacheFormatCatalog
+	sharedHolders  *SharedHolders // nil when no tier is shared
 	// recordHits enables the contiguous-chain hit metrics, under the same
 	// option that instruments the index.
 	recordHits bool
@@ -110,6 +111,12 @@ func (k *Indexer) Run(ctx context.Context) {
 // KVBlockIndex returns the kvblock.Index used by the Indexer.
 func (k *Indexer) KVBlockIndex() kvblock.Index {
 	return k.kvBlockIndex
+}
+
+// SetSharedHolders credits blocks of shared tiers to every candidate pod in
+// their scope. Call it before request processing starts.
+func (k *Indexer) SetSharedHolders(holders *SharedHolders) {
+	k.sharedHolders = holders
 }
 
 // SetCacheFormats connects event metadata before request processing starts.

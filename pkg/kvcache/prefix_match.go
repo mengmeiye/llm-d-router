@@ -72,12 +72,25 @@ type PodMatch struct {
 // (every pod when empty) and returns one PodMatch per pod that holds the
 // first key. Empty keys match nothing. The matcher walks the index when the
 // backend is a kvblock.KeyWalker and otherwise materializes Lookup; both
-// feed the same accumulator.
+// feed the same accumulator. With shared tiers configured, a block a shared
+// holder holds counts for every pod of podFilter in the holder's scope; with
+// an empty podFilter shared holders are reported as pods of their own.
 func (k *Indexer) MatchBlockKeys(ctx context.Context, keys []kvblock.BlockHash,
 	podFilter sets.Set[string],
 ) (map[string]PodMatch, error) {
 	if len(keys) == 0 {
 		return map[string]PodMatch{}, nil
+	}
+	var holders map[string][]string
+	if podFilter.Len() > 0 {
+		holders = k.sharedHolders.HoldersFor(sets.List(podFilter))
+	}
+	if len(holders) > 0 {
+		expanded := podFilter.Clone()
+		for holder := range holders {
+			expanded.Insert(holder)
+		}
+		podFilter = expanded
 	}
 
 	tracer := tracing.Tracer(TracerScope)
@@ -94,9 +107,9 @@ func (k *Indexer) MatchBlockKeys(ctx context.Context, keys []kvblock.BlockHash,
 	var matches map[string]PodMatch
 	var err error
 	if k.keyWalker != nil {
-		matches, err = matchWalk(ctx, k.keyWalker, keys, k.tierWeights, podFilter)
+		matches, err = matchWalk(ctx, k.keyWalker, keys, k.tierWeights, podFilter, holders)
 	} else {
-		matches, err = matchLookup(ctx, k.kvBlockIndex, keys, k.tierWeights, podFilter)
+		matches, err = matchLookup(ctx, k.kvBlockIndex, keys, k.tierWeights, podFilter, holders)
 	}
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -129,13 +142,14 @@ func maxMatchedBlocks(matches map[string]PodMatch) int {
 // matchWalk feeds the accumulator from an ordered index walk. The walk ends
 // at the first key without entries or once no chain is alive.
 func matchWalk(ctx context.Context, walker kvblock.KeyWalker, keys []kvblock.BlockHash,
-	weights map[string]float64, filter sets.Set[string],
+	weights map[string]float64, filter sets.Set[string], holders map[string][]string,
 ) (map[string]PodMatch, error) {
 	acc := acquireAccumulator(weights, filter)
 	defer releaseAccumulator(acc)
+	expand := newSharedExpander(acc, holders)
 
 	err := walker.WalkKeys(ctx, keys, func(_ int, found bool, entries []kvblock.EntryRef) bool {
-		return found && len(entries) > 0 && acc.key(entries)
+		return found && len(entries) > 0 && acc.key(expand.entries(entries))
 	})
 	if err != nil {
 		return nil, err
@@ -146,13 +160,13 @@ func matchWalk(ctx context.Context, walker kvblock.KeyWalker, keys []kvblock.Blo
 // matchLookup feeds the accumulator from a materialized Lookup result, for
 // backends without the walk capability.
 func matchLookup(ctx context.Context, index kvblock.Index, keys []kvblock.BlockHash,
-	weights map[string]float64, filter sets.Set[string],
+	weights map[string]float64, filter sets.Set[string], holders map[string][]string,
 ) (map[string]PodMatch, error) {
 	keyToPods, err := index.Lookup(ctx, keys, filter)
 	if err != nil {
 		return nil, err
 	}
-	return matchMaterialized(ctx, keys, keyToPods, weights, filter)
+	return matchMaterialized(ctx, keys, keyToPods, weights, filter, holders)
 }
 
 // matchMaterialized feeds the accumulator from a Lookup result, walking keys
@@ -160,10 +174,11 @@ func matchLookup(ctx context.Context, index kvblock.Index, keys []kvblock.BlockH
 // ordinals are assigned per call, since materialized entries carry none.
 func matchMaterialized(ctx context.Context, keys []kvblock.BlockHash,
 	keyToPods map[kvblock.BlockHash][]kvblock.PodEntry,
-	weights map[string]float64, filter sets.Set[string],
+	weights map[string]float64, filter sets.Set[string], holders map[string][]string,
 ) (map[string]PodMatch, error) {
 	acc := acquireAccumulator(weights, filter)
 	defer releaseAccumulator(acc)
+	expand := newSharedExpander(acc, holders)
 
 	refs := acc.refs[:0]
 	defer func() {
@@ -204,7 +219,7 @@ func matchMaterialized(ctx context.Context, keys []kvblock.BlockHash,
 				TierOrdinal: acc.tierOrdinal(e.DeviceTier),
 			})
 		}
-		if !acc.key(refs) {
+		if !acc.key(expand.entries(refs)) {
 			break
 		}
 	}
@@ -214,6 +229,50 @@ func matchMaterialized(ctx context.Context, keys []kvblock.BlockHash,
 		return nil, err
 	}
 	return acc.result(), nil
+}
+
+// sharedExpander replaces each shared holder's entries at a key with one
+// entry per candidate pod in the holder's scope, so the accumulator credits
+// the holder's blocks to those pods. Pod ordinals are reassigned from the
+// accumulator's request-local table: walked entries carry the index's
+// ordinals, which the expanded pods do not share.
+type sharedExpander struct {
+	acc     *prefixAccumulator
+	holders map[string][]string
+	buf     []kvblock.EntryRef
+}
+
+// newSharedExpander returns nil, which passes entries through, when no
+// holder serves a candidate.
+func newSharedExpander(acc *prefixAccumulator, holders map[string][]string) *sharedExpander {
+	if len(holders) == 0 {
+		return nil
+	}
+	return &sharedExpander{acc: acc, holders: holders}
+}
+
+// entries returns the expanded entries, valid until the next call.
+func (e *sharedExpander) entries(in []kvblock.EntryRef) []kvblock.EntryRef {
+	if e == nil {
+		return in
+	}
+	out := e.buf[:0]
+	for _, ref := range in {
+		pods, shared := e.holders[ref.PodIdentifier]
+		if !shared {
+			ref.PodOrdinal = e.acc.podOrdinal(ref.PodIdentifier)
+			out = append(out, ref)
+			continue
+		}
+		for _, pod := range pods {
+			credited := ref
+			credited.PodIdentifier = pod
+			credited.PodOrdinal = e.acc.podOrdinal(pod)
+			out = append(out, credited)
+		}
+	}
+	e.buf = out
+	return out
 }
 
 // ordinalTable assigns dense ordinals to names in first-seen order.

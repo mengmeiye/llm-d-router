@@ -71,6 +71,35 @@ another publisher identity, the pod is indexed from live events alone, as it
 is with neither port set, and the load is retried after the replay cooldown.
 A snapshot that loads replaces that state.
 
+### Shared tiers
+
+Set `shared` on an `indexerConfig.kvCacheBackendConfigs` entry when every
+endpoint in a scope can load that tier's blocks, for example a vLLM
+filesystem tier on a KV pool shared by the replicas of a node:
+
+```yaml
+indexerConfig:
+  kvCacheBackendConfigs:
+    - {name: gpu, weight: 1.0}
+    - {name: cpu, weight: 0.8}
+    - {name: storage, weight: 0.6, shared: node}
+```
+
+| `shared` | Blocks count for |
+|----------|------------------|
+| unset | The endpoint that published them. |
+| `node` | Every candidate endpoint on the publishing endpoint's node (`pod.Status.HostIP`). |
+| `pool` | Every candidate endpoint. |
+
+Blocks of a shared tier are indexed under their scope rather than under the
+publishing endpoint. Deleting that endpoint, or an `AllBlocksCleared` from it,
+leaves them indexed, so requests a failed replica would have served route to
+a sibling that can load its blocks, and a replica added to the scope matches
+them before it publishes anything. They leave the index on a `BlockRemoved`
+from any endpoint in the scope, or by index capacity eviction. Node scope
+requires `kvEventsConfig.discoverPods`; a block from an endpoint whose node is
+not yet known stays with that endpoint.
+
 See [llm-d-kv-cache/docs/configuration.md](https://github.com/llm-d/llm-d-kv-cache/blob/main/docs/configuration.md)
 for nested parameter details.
 

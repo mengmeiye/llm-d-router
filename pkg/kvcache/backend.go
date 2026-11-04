@@ -16,7 +16,10 @@ limitations under the License.
 
 package kvcache
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // GPUTier is the tier name of blocks resident in GPU memory. KV events that
 // carry no medium are indexed under it.
@@ -27,6 +30,12 @@ type KVCacheBackendConfig struct {
 	Name string `json:"name"`
 	// Weight is the scoring weight for blocks stored on this medium
 	Weight float64 `json:"weight"`
+	// Shared marks a medium whose blocks every endpoint in a scope can load,
+	// such as a KV pool on a node-local or cluster-wide shared filesystem.
+	// Its blocks are attributed to the scope rather than to the publishing
+	// endpoint, so they stay indexed when that endpoint goes away and count
+	// for endpoints that join the scope later. Empty means not shared.
+	Shared SharedScope `json:"shared,omitempty"`
 }
 
 // DefaultKVCacheBackendConfig returns the default backend weights, tunable
@@ -51,4 +60,20 @@ func tierWeightsFromBackends(backends []*KVCacheBackendConfig) map[string]float6
 		weights[strings.ToLower(medium.Name)] = medium.Weight
 	}
 	return weights
+}
+
+// sharedTiersFromBackends maps each shared backend's device tier to its scope.
+func sharedTiersFromBackends(backends []*KVCacheBackendConfig) (map[string]SharedScope, error) {
+	shared := make(map[string]SharedScope)
+	for _, medium := range backends {
+		switch medium.Shared {
+		case SharedScopeNone:
+		case SharedScopeNode, SharedScopePool:
+			shared[strings.ToLower(medium.Name)] = medium.Shared
+		default:
+			return nil, fmt.Errorf("kvCacheBackendConfigs %q: unknown shared scope %q (want %q or %q)",
+				medium.Name, medium.Shared, SharedScopeNode, SharedScopePool)
+		}
+	}
+	return shared, nil
 }

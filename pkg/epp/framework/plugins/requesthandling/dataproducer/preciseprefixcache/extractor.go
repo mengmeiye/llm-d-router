@@ -49,8 +49,10 @@ func (p *Producer) Extract(ctx context.Context, event fwkdl.EndpointEvent) error
 	matchesSelector := p.podSelector == nil || p.podSelector.Matches(labels.Set(meta.Labels))
 	switch {
 	case event.Type == fwkdl.EventAddOrUpdate && matchesSelector:
+		p.sharedHolders.SetNode(sourceEndpoint(meta), meta.GetNodeAddress())
 		return p.ensureSubscriber(ctx, meta)
 	case event.Type == fwkdl.EventAddOrUpdate || event.Type == fwkdl.EventDelete:
+		p.sharedHolders.SetNode(sourceEndpoint(meta), "")
 		removed := p.subscribersManager.RemoveSubscriber(ctx, endpointKey)
 		if !removed && event.Type == fwkdl.EventAddOrUpdate {
 			return nil
@@ -78,13 +80,11 @@ func (p *Producer) ensureSubscriber(ctx context.Context, meta *fwkdl.EndpointMet
 	if snapshotPort := p.kvEventsConfig.PodDiscoveryConfig.SnapshotSocketPort; snapshotPort > 0 {
 		snapshotEndpoint = "tcp://" + net.JoinHostPort(meta.Address, strconv.Itoa(snapshotPort+meta.GetRankIndex()))
 	}
-	sourceEndpoint := fmt.Sprintf("%s:%s", meta.Address, meta.Port)
-
 	logger := log.FromContext(ctx).WithName(p.typedName.String())
 	// subscriberCtx is plugin-lifetime; caller ctx would tear subscribers
 	// down on request completion.
 	if err := p.subscribersManager.EnsureSubscriber(p.subscriberCtx, endpointKey,
-		sourceEndpoint, zmqEndpoint, replayEndpoint, snapshotEndpoint, p.kvEventsConfig.TopicFilter, true); err != nil {
+		sourceEndpoint(meta), zmqEndpoint, replayEndpoint, snapshotEndpoint, p.kvEventsConfig.TopicFilter, true); err != nil {
 		logger.Error(err, "Failed to ensure KV-events subscriber for endpoint",
 			"endpoint", endpointKey, "address", meta.Address)
 		return fmt.Errorf("ensure subscriber for %s: %w", endpointKey, err)
@@ -92,4 +92,10 @@ func (p *Producer) ensureSubscriber(ctx context.Context, meta *fwkdl.EndpointMet
 	logger.V(logging.DEBUG).Info("Ensured KV-events subscriber",
 		"endpoint", endpointKey, "zmq", zmqEndpoint, "replay", replayEndpoint, "snapshot", snapshotEndpoint)
 	return nil
+}
+
+// sourceEndpoint is the index identity of an endpoint's KV events, the same
+// address:port key Produce matches it under.
+func sourceEndpoint(meta *fwkdl.EndpointMetadata) string {
+	return fmt.Sprintf("%s:%s", meta.Address, meta.Port)
 }
